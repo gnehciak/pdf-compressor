@@ -3,33 +3,81 @@ import PDFKit
 
 // MARK: - Settings
 
-struct CompressionSettings: Equatable {
+enum CompressionMode: String, Codable, Equatable {
+    case quality
+    case targetSize
+}
+
+struct CompressionSettings: Equatable, Codable {
+    var mode: CompressionMode = .quality
     var targetDPI: Int = 72
     var jpegQuality: Int = 40
+    var targetSizeMB: Double = 10
     var grayscale: Bool = false
-    var extraOptimize: Bool = true   // second pass through ocrmypdf --optimize
+    var extraOptimize: Bool = true
     var optimizeLevel: Int = 3
+    var makeSearchable: Bool = false
+    var stripMetadata: Bool = false
 
     static let dpiPresets: [(dpi: Int, label: String)] = [
-        (300, "300 — Print quality"),
-        (200, "200 — High quality"),
-        (150, "150 — Good quality"),
-        (100, "100 — Decent"),
-        (72,  "72 — Screen quality"),
-        (50,  "50 — Blurry but readable"),
-        (36,  "36 — Pixelated"),
-        (25,  "25 — Heavy artifacts"),
-        (15,  "15 — Barely readable"),
-        (10,  "10 — Practically destroyed"),
+        (300, String(localized: "300 — Print quality")),
+        (200, String(localized: "200 — High quality")),
+        (150, String(localized: "150 — Good quality")),
+        (100, String(localized: "100 — Decent")),
+        (72,  String(localized: "72 — Screen quality")),
+        (50,  String(localized: "50 — Blurry but readable")),
+        (36,  String(localized: "36 — Pixelated")),
+        (25,  String(localized: "25 — Heavy artifacts")),
+        (15,  String(localized: "15 — Barely readable")),
+        (10,  String(localized: "10 — Practically destroyed")),
     ]
 
     static let qualityPresets: [(q: Int, label: String)] = [
-        (90, "90 — High quality"),
-        (70, "70 — Good"),
-        (50, "50 — Medium"),
-        (40, "40 — Low"),
-        (25, "25 — Very low"),
-        (15, "15 — Lowest"),
+        (90, String(localized: "90 — High quality")),
+        (70, String(localized: "70 — Good")),
+        (50, String(localized: "50 — Medium")),
+        (40, String(localized: "40 — Low")),
+        (25, String(localized: "25 — Very low")),
+        (15, String(localized: "15 — Lowest")),
+    ]
+
+    /// Quality ladder used by target-size search, best quality first.
+    static let ladder: [(dpi: Int, q: Int)] = [
+        (300, 90), (250, 80), (200, 70), (150, 60), (150, 45),
+        (120, 45), (100, 40), (72, 40), (72, 28), (50, 25),
+        (36, 18), (25, 12), (15, 8), (10, 5),
+    ]
+
+    func atLadder(_ index: Int) -> CompressionSettings {
+        var s = self
+        s.mode = .quality
+        s.targetDPI = Self.ladder[index].dpi
+        s.jpegQuality = Self.ladder[index].q
+        return s
+    }
+
+    var targetSizeBytes: Int64 { Int64(targetSizeMB * 1_000_000) }
+}
+
+// MARK: - Presets
+
+struct Preset: Identifiable, Codable, Equatable {
+    var id = UUID()
+    var name: String
+    var settings: CompressionSettings
+
+    private static func make(_ name: String, _ configure: (inout CompressionSettings) -> Void) -> Preset {
+        var s = CompressionSettings()
+        configure(&s)
+        return Preset(name: name, settings: s)
+    }
+
+    static let builtins: [Preset] = [
+        make(String(localized: "Email — under 10 MB")) { $0.mode = .targetSize; $0.targetSizeMB = 10 },
+        make(String(localized: "High quality — 150 DPI")) { $0.targetDPI = 150; $0.jpegQuality = 70 },
+        make(String(localized: "Screen — 100 DPI")) { $0.targetDPI = 100; $0.jpegQuality = 50 },
+        make(String(localized: "Compact scan — 72 DPI")) { $0.targetDPI = 72; $0.jpegQuality = 40 },
+        make(String(localized: "Tiny — 36 DPI")) { $0.targetDPI = 36; $0.jpegQuality = 25 },
     ]
 }
 
@@ -45,19 +93,22 @@ enum EngineError: LocalizedError {
     case toolNotFound(String)
     case commandFailed(tool: String, status: Int32, stderr: String)
     case pageExtractionFailed
+    case passwordRequired
     case cancelled
 
     var errorDescription: String? {
         switch self {
         case .toolNotFound(let t):
-            return "\(t) not found. Install it with: brew install \(t == "pdfimages" ? "poppler" : t)"
+            return String(localized: "\(t) not found. Install it with Homebrew.")
         case .commandFailed(let tool, let status, let stderr):
             let detail = stderr.split(separator: "\n").suffix(3).joined(separator: " ")
             return "\(tool) failed (exit \(status)). \(detail)"
         case .pageExtractionFailed:
-            return "Could not extract page for preview."
+            return String(localized: "Could not extract page for preview.")
+        case .passwordRequired:
+            return String(localized: "Password required")
         case .cancelled:
-            return "Cancelled."
+            return String(localized: "Cancelled.")
         }
     }
 }
@@ -99,6 +150,17 @@ enum Tools {
 // MARK: - Engine
 
 enum Engine {
+
+    static var tempDir: URL {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("PDFCompressor", isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir
+    }
+
+    static func tempPDF() -> URL {
+        tempDir.appendingPathComponent(UUID().uuidString + ".pdf")
+    }
 
     @discardableResult
     static func run(_ toolPath: String, _ args: [String]) async throws -> ShellResult {
@@ -151,9 +213,13 @@ enum Engine {
     /// Highest effective DPI among embedded images, read natively via CGPDF.
     /// Assumes an image spans its page (true for scans), so this is a lower
     /// bound for images drawn smaller than the page.
-    static func detectMaxDPI(of url: URL) async -> Int? {
+    static func detectMaxDPI(of url: URL, password: String? = nil) async -> Int? {
         await Task.detached(priority: .utility) { () -> Int? in
-            guard let doc = CGPDFDocument(url as CFURL), doc.numberOfPages > 0 else { return nil }
+            guard let doc = CGPDFDocument(url as CFURL) else { return nil }
+            if doc.isEncrypted, !doc.isUnlocked, let password {
+                _ = password.withCString { doc.unlockWithPassword($0) }
+            }
+            guard doc.isUnlocked, doc.numberOfPages > 0 else { return nil }
             var maxPPI = 0.0
             for pageNum in 1...doc.numberOfPages {
                 guard let page = doc.page(at: pageNum) else { continue }
@@ -209,7 +275,7 @@ enum Engine {
         return 0.9
     }
 
-    static func ghostscript(input: URL, output: URL, settings: CompressionSettings) async throws {
+    static func ghostscript(input: URL, output: URL, settings: CompressionSettings, password: String? = nil) async throws {
         guard let gs = Tools.find("gs") else { throw EngineError.toolNotFound("ghostscript") }
         var args = [
             "-sDEVICE=pdfwrite",
@@ -230,6 +296,9 @@ enum Engine {
         ]
         if settings.grayscale {
             args += ["-sColorConversionStrategy=Gray", "-dProcessColorModel=/DeviceGray"]
+        }
+        if let password, !password.isEmpty {
+            args += ["-sPDFPassword=\(password)"]
         }
         let qf = String(format: "%.2f", qFactor(forQuality: settings.jpegQuality))
         let imageDict = "<< /QFactor \(qf) /Blend 1 /HSamples [1 1 1 1] /VSamples [1 1 1 1] >>"
@@ -263,6 +332,56 @@ enum Engine {
         }
     }
 
+    // MARK: Target-size search
+
+    /// Finds the highest-quality ladder entry whose Ghostscript output fits
+    /// `targetBytes` (binary search — sizes decrease along the ladder).
+    /// Returns the output and the settings used; falls back to the most
+    /// aggressive entry if nothing fits.
+    static func searchToTarget(
+        _ input: URL,
+        targetBytes: Int64,
+        base: CompressionSettings,
+        password: String?,
+        stage: @escaping @Sendable (String) -> Void
+    ) async throws -> (url: URL, settings: CompressionSettings) {
+        var lo = 0
+        var hi = CompressionSettings.ladder.count - 1
+        var best: (URL, CompressionSettings)?
+        while lo <= hi {
+            try Task.checkCancellation()
+            let mid = (lo + hi) / 2
+            let candidate = base.atLadder(mid)
+            stage(String(localized: "Trying \(candidate.targetDPI) DPI · quality \(candidate.jpegQuality)…"))
+            let out = tempPDF()
+            try await ghostscript(input: input, output: out, settings: candidate, password: password)
+            if fileSize(out) <= targetBytes {
+                if let (oldURL, _) = best { try? FileManager.default.removeItem(at: oldURL) }
+                best = (out, candidate)
+                hi = mid - 1
+            } else {
+                try? FileManager.default.removeItem(at: out)
+                lo = mid + 1
+            }
+        }
+        if let best { return best }
+        // Nothing fit — use the most aggressive settings.
+        let fallback = base.atLadder(CompressionSettings.ladder.count - 1)
+        stage(String(localized: "Trying \(fallback.targetDPI) DPI · quality \(fallback.jpegQuality)…"))
+        let out = tempPDF()
+        try await ghostscript(input: input, output: out, settings: fallback, password: password)
+        return (out, fallback)
+    }
+
+    // MARK: Metadata stripping
+
+    /// Clears the document info dictionary (title, author, producer, …).
+    static func stripMetadata(at url: URL) {
+        guard let doc = PDFDocument(url: url) else { return }
+        doc.documentAttributes = [:]
+        doc.write(to: url)
+    }
+
     // MARK: Full-file compression
 
     enum Outcome {
@@ -270,51 +389,74 @@ enum Engine {
         case keptOriginal(Int64)        // compressed size that was rejected
     }
 
-    /// Runs the full pipeline. Writes `<name>_compressed.pdf` next to the original
-    /// (uniqued if that name is taken). Keeps the original if the result is not smaller.
+    /// Runs the full pipeline. Writes `<name>_compressed.pdf` next to the
+    /// original (or replaces the original, moving it to the Trash). Keeps the
+    /// original if the result is not smaller — unless OCR was requested, in
+    /// which case the searchable output is the point.
     static func compressFile(
         _ input: URL,
         settings: CompressionSettings,
+        password: String? = nil,
+        replaceOriginal: Bool = false,
         stage: @escaping @Sendable (String) -> Void
     ) async throws -> Outcome {
         let originalSize = fileSize(input)
-        let tempDir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("PDFCompressor", isDirectory: true)
-        try? FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
-        let temp = tempDir.appendingPathComponent(UUID().uuidString + ".pdf")
-        defer { try? FileManager.default.removeItem(at: temp) }
+        var work: URL
 
-        stage("Downsampling…")
-        try await ghostscript(input: input, output: temp, settings: settings)
+        if settings.mode == .targetSize {
+            (work, _) = try await searchToTarget(
+                input, targetBytes: settings.targetSizeBytes,
+                base: settings, password: password, stage: stage
+            )
+        } else {
+            stage(String(localized: "Downsampling…"))
+            work = tempPDF()
+            try await ghostscript(input: input, output: work, settings: settings, password: password)
+        }
         try Task.checkCancellation()
 
-        var resultURL = temp
         if settings.extraOptimize && Tools.hasOCRmyPDF {
-            stage("Optimizing…")
-            let optimized = tempDir.appendingPathComponent(UUID().uuidString + ".pdf")
+            stage(String(localized: "Optimizing…"))
+            let optimized = tempPDF()
             do {
-                try await optimize(input: temp, output: optimized, settings: settings)
-                resultURL = optimized
+                try await optimize(input: work, output: optimized, settings: settings)
+                try? FileManager.default.removeItem(at: work)
+                work = optimized
             } catch is CancellationError {
                 throw CancellationError()
             } catch {
-                // Optimizer failure is non-fatal — fall back to the Ghostscript output.
-                resultURL = temp
+                // Optimizer failure is non-fatal — keep the Ghostscript output.
             }
         }
         try Task.checkCancellation()
 
-        let newSize = fileSize(resultURL)
-        if newSize >= originalSize || newSize == 0 {
-            if resultURL != temp { try? FileManager.default.removeItem(at: resultURL) }
+        if settings.makeSearchable {
+            stage(String(localized: "Recognizing text…"))
+            let searchable = try await OCREngine.addTextLayer(compressed: work, original: input, password: password)
+            try? FileManager.default.removeItem(at: work)
+            work = searchable
+        }
+        try Task.checkCancellation()
+
+        if settings.stripMetadata {
+            stage(String(localized: "Stripping metadata…"))
+            stripMetadata(at: work)
+        }
+
+        let newSize = fileSize(work)
+        let keepEvenIfLarger = settings.makeSearchable
+        if !keepEvenIfLarger && (newSize >= originalSize || newSize == 0) {
+            try? FileManager.default.removeItem(at: work)
             return .keptOriginal(newSize)
         }
 
-        let output = uniqueOutputURL(for: input)
-        if FileManager.default.fileExists(atPath: output.path) {
-            try FileManager.default.removeItem(at: output)
+        if replaceOriginal {
+            try FileManager.default.trashItem(at: input, resultingItemURL: nil)
+            try FileManager.default.moveItem(at: work, to: input)
+            return .compressed(input, newSize)
         }
-        try FileManager.default.moveItem(at: resultURL, to: output)
+        let output = uniqueOutputURL(for: input)
+        try FileManager.default.moveItem(at: work, to: output)
         return .compressed(output, newSize)
     }
 
@@ -339,33 +481,93 @@ enum Engine {
         let compressedPageBytes: Int64
     }
 
-    /// Extracts one page and runs the Ghostscript pass on it so the preview shows
-    /// real downsampling + JPEG artifacts at the chosen settings.
-    static func previewPage(of document: URL, pageIndex: Int, settings: CompressionSettings) async throws -> PagePreview {
-        let tempDir = FileManager.default.temporaryDirectory
+    private static func previewTempDir() -> URL {
+        let dir = FileManager.default.temporaryDirectory
             .appendingPathComponent("PDFCompressorPreview", isDirectory: true)
-        try? FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir
+    }
 
-        guard let doc = PDFDocument(url: document),
-              pageIndex < doc.pageCount,
-              let page = doc.page(at: pageIndex) else {
+    private static func extractPage(of document: URL, pageIndex: Int, password: String?) throws -> URL {
+        guard let doc = PDFDocument(url: document) else { throw EngineError.pageExtractionFailed }
+        if doc.isLocked {
+            guard let password, doc.unlock(withPassword: password) else { throw EngineError.passwordRequired }
+        }
+        guard pageIndex < doc.pageCount, let page = doc.page(at: pageIndex) else {
             throw EngineError.pageExtractionFailed
         }
         let onePage = PDFDocument()
         onePage.insert(page, at: 0)
-        let originalPageURL = tempDir.appendingPathComponent("orig-\(UUID().uuidString).pdf")
-        guard onePage.write(to: originalPageURL) else { throw EngineError.pageExtractionFailed }
+        let url = previewTempDir().appendingPathComponent("orig-\(UUID().uuidString).pdf")
+        guard onePage.write(to: url) else { throw EngineError.pageExtractionFailed }
+        return url
+    }
 
+    /// Extracts one page and runs the Ghostscript pass on it so the preview
+    /// shows real downsampling + JPEG artifacts at the chosen settings.
+    static func previewPage(of document: URL, pageIndex: Int, settings: CompressionSettings, password: String? = nil) async throws -> PagePreview {
+        let originalPageURL = try extractPage(of: document, pageIndex: pageIndex, password: password)
         try Task.checkCancellation()
-        let compressedPageURL = tempDir.appendingPathComponent("comp-\(UUID().uuidString).pdf")
+        let compressedPageURL = previewTempDir().appendingPathComponent("comp-\(UUID().uuidString).pdf")
         try await ghostscript(input: originalPageURL, output: compressedPageURL, settings: settings)
-
         return PagePreview(
             originalPageURL: originalPageURL,
             compressedPageURL: compressedPageURL,
             originalPageBytes: fileSize(originalPageURL),
             compressedPageBytes: fileSize(compressedPageURL)
         )
+    }
+
+    /// Target-size preview: probes the ladder on a single page, estimating the
+    /// whole-file size from the page ratio, and returns the chosen settings.
+    static func previewAutoTarget(
+        of document: URL,
+        pageIndex: Int,
+        base: CompressionSettings,
+        fullFileSize: Int64,
+        password: String? = nil
+    ) async throws -> (preview: PagePreview, chosen: CompressionSettings) {
+        let originalPageURL = try extractPage(of: document, pageIndex: pageIndex, password: password)
+        let originalPageBytes = fileSize(originalPageURL)
+        guard originalPageBytes > 0 else { throw EngineError.pageExtractionFailed }
+
+        let target = base.targetSizeBytes
+        var lo = 0
+        var hi = CompressionSettings.ladder.count - 1
+        var best: (URL, Int64, CompressionSettings)?
+        while lo <= hi {
+            try Task.checkCancellation()
+            let mid = (lo + hi) / 2
+            let candidate = base.atLadder(mid)
+            let out = previewTempDir().appendingPathComponent("comp-\(UUID().uuidString).pdf")
+            try await ghostscript(input: originalPageURL, output: out, settings: candidate)
+            let pageBytes = fileSize(out)
+            let estimated = Int64(Double(fullFileSize) * Double(pageBytes) / Double(originalPageBytes))
+            if estimated <= target {
+                if let (oldURL, _, _) = best { try? FileManager.default.removeItem(at: oldURL) }
+                best = (out, pageBytes, candidate)
+                hi = mid - 1
+            } else {
+                try? FileManager.default.removeItem(at: out)
+                lo = mid + 1
+            }
+        }
+        let chosen: (URL, Int64, CompressionSettings)
+        if let best {
+            chosen = best
+        } else {
+            let fallback = base.atLadder(CompressionSettings.ladder.count - 1)
+            let out = previewTempDir().appendingPathComponent("comp-\(UUID().uuidString).pdf")
+            try await ghostscript(input: originalPageURL, output: out, settings: fallback)
+            chosen = (out, fileSize(out), fallback)
+        }
+        let preview = PagePreview(
+            originalPageURL: originalPageURL,
+            compressedPageURL: chosen.0,
+            originalPageBytes: originalPageBytes,
+            compressedPageBytes: chosen.1
+        )
+        return (preview, chosen.2)
     }
 
     static func cleanPreviewTemp() {

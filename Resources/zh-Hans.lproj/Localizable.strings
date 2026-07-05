@@ -1,0 +1,132 @@
+/* Toolbar & menus */
+"Add PDFs" = "添加 PDF";
+"Add PDF files" = "添加 PDF 文件";
+"Compress All" = "全部压缩";
+"Compress all pending files" = "压缩所有待处理文件";
+"Stop" = "停止";
+"Settings" = "设置";
+"Show or hide compression settings" = "显示或隐藏压缩设置";
+"Open PDFs…" = "打开 PDF…";
+"Missing tools" = "缺少工具";
+"Install the required tools first:\n\nbrew install %@" = "请先安装所需工具：\n\nbrew install %@";
+"Quit" = "退出";
+
+/* Sidebar */
+"Files" = "文件";
+"No PDFs" = "没有 PDF";
+"Drop PDF files anywhere in the window\nor click + to add them." = "将 PDF 文件拖入窗口任意位置\n或点按 + 添加。";
+"Share Compressed" = "共享压缩文件";
+"Show Compressed in Finder" = "在访达中显示压缩文件";
+"Show Original in Finder" = "在访达中显示原始文件";
+"Remove Custom Settings" = "移除自定义设置";
+"Remove" = "移除";
+"Clear Finished" = "清除已完成";
+"Saved %@ across %lld file(s)" = "共 %2$lld 个文件，节省 %1$@";
+"Share the compressed file" = "共享压缩后的文件";
+"Uses custom settings" = "使用自定义设置";
+"Password required" = "需要密码";
+"result was larger — kept original" = "结果更大 — 已保留原始文件";
+"Not a readable PDF" = "无法读取的 PDF";
+"Password required — select the file and enter it" = "需要密码 — 请选中该文件并输入密码";
+
+/* Preview */
+"No preview" = "无预览";
+"Select a PDF in the sidebar to preview compression." = "在边栏中选择一个 PDF 以预览压缩效果。";
+"Original" = "原始";
+"Compressed" = "已压缩";
+"page" = "页";
+"Drag the handle to compare" = "拖动手柄进行对比";
+"Rendering preview…" = "正在渲染预览…";
+"Preview failed" = "预览失败";
+"Page %lld of %lld" = "第 %1$lld 页，共 %2$lld 页";
+"Estimated full file: %@ → ~%@" = "预计整个文件：%1$@ → 约 %2$@";
+"Side by side" = "并排显示";
+"Comparison slider" = "对比滑块";
+"%lld%% — double-click to reset" = "%lld%% — 连按两下还原";
+"Auto: %lld DPI · quality %lld" = "自动：%1$lld DPI · 质量 %2$lld";
+
+/* Unlock */
+"“%@” is password-protected" = "“%@”受密码保护";
+"Password" = "密码";
+"Wrong password — try again" = "密码错误 — 请重试";
+"Unlock" = "解锁";
+
+/* Settings panel */
+"Compression" = "压缩";
+"Preset:" = "预设：";
+"Custom" = "自定义";
+"Save Preset" = "保存预设";
+"Preset name" = "预设名称";
+"Save" = "保存";
+"Cancel" = "取消";
+"Saves the current settings as a reusable preset." = "将当前设置保存为可重复使用的预设。";
+"Delete Preset" = "删除预设";
+"Save Current as Preset…" = "将当前设置保存为预设…";
+"Custom settings for this file" = "为此文件使用自定义设置";
+"Compress this file with different settings than the rest of the batch" = "使用与批处理中其他文件不同的设置压缩此文件";
+"Quality" = "质量";
+"Target size" = "目标大小";
+"Target file size" = "目标文件大小";
+"Size" = "大小";
+"MB" = "MB";
+"Automatically finds the best quality that fits under this size." = "自动寻找不超过此大小的最佳质量。";
+"Target resolution" = "目标分辨率";
+"Original images: %lld DPI" = "原始图像：%lld DPI";
+"Custom — %lld DPI" = "自定义 — %lld DPI";
+"Custom — %lld" = "自定义 — %lld";
+"%lld DPI" = "%lld DPI";
+"JPEG quality" = "JPEG 质量";
+"Quality %lld — lower is smaller" = "质量 %lld — 数值越低文件越小";
+"Options" = "选项";
+"Convert to grayscale" = "转换为灰度";
+"Make searchable (OCR)" = "添加可搜索文本 (OCR)";
+"Adds an invisible text layer with Apple's on-device text recognition, so scans become selectable and searchable." = "使用 Apple 设备端文字识别添加不可见文本层，让扫描件可以选中和搜索。";
+"Strip metadata" = "移除元数据";
+"Removes title, author and other document info before sharing." = "在共享前移除标题、作者等文稿信息。";
+"Extra optimization pass" = "额外优化处理";
+"Runs ocrmypdf --optimize after downsampling. Slower, but often much smaller." = "降采样后运行 ocrmypdf --optimize。速度较慢，但文件通常小得多。";
+"Install ocrmypdf (brew install ocrmypdf) to enable the extra optimization pass." = "安装 ocrmypdf（brew install ocrmypdf）以启用额外优化处理。";
+"Output" = "输出";
+"Replace original file" = "替换原始文件";
+"The original is moved to the Trash and the compressed file takes its place." = "原始文件将移到废纸篓，由压缩文件取而代之。";
+"Saved next to the original as *_compressed.pdf. If the result isn’t smaller, the original is kept." = "在原始文件旁保存为 *_compressed.pdf。如果结果没有更小，则保留原始文件。";
+
+/* Presets */
+"Email — under 10 MB" = "电子邮件 — 小于 10 MB";
+"High quality — 150 DPI" = "高质量 — 150 DPI";
+"Screen — 100 DPI" = "屏幕 — 100 DPI";
+"Compact scan — 72 DPI" = "紧凑扫描件 — 72 DPI";
+"Tiny — 36 DPI" = "极小 — 36 DPI";
+
+/* DPI / quality preset labels */
+"300 — Print quality" = "300 — 打印质量";
+"200 — High quality" = "200 — 高质量";
+"150 — Good quality" = "150 — 良好质量";
+"100 — Decent" = "100 — 尚可";
+"72 — Screen quality" = "72 — 屏幕质量";
+"50 — Blurry but readable" = "50 — 模糊但可读";
+"36 — Pixelated" = "36 — 像素化";
+"25 — Heavy artifacts" = "25 — 严重失真";
+"15 — Barely readable" = "15 — 勉强可读";
+"10 — Practically destroyed" = "10 — 几乎不可用";
+"90 — High quality" = "90 — 高质量";
+"70 — Good" = "70 — 良好";
+"50 — Medium" = "50 — 中等";
+"40 — Low" = "40 — 低";
+"25 — Very low" = "25 — 很低";
+"15 — Lowest" = "15 — 最低";
+
+/* Engine stages & errors */
+"Starting…" = "正在开始…";
+"Downsampling…" = "正在降采样…";
+"Optimizing…" = "正在优化…";
+"Recognizing text…" = "正在识别文字…";
+"Stripping metadata…" = "正在移除元数据…";
+"Trying %lld DPI · quality %lld…" = "正在尝试 %1$lld DPI · 质量 %2$lld…";
+"%@ not found. Install it with Homebrew." = "未找到 %@。请通过 Homebrew 安装。";
+"Could not extract page for preview." = "无法提取页面以生成预览。";
+"Cancelled." = "已取消。";
+
+/* Notifications */
+"Compression finished" = "压缩完成";
+"%lld file(s) compressed, saved %@." = "已压缩 %1$lld 个文件，节省 %2$@。";

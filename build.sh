@@ -21,6 +21,9 @@ rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN" "$APP/Contents/MacOS/PDFCompressor"
 cp Resources/Info.plist "$APP/Contents/Info.plist"
+for lproj in Resources/*.lproj(N); do
+    cp -R "$lproj" "$APP/Contents/Resources/"
+done
 
 echo "── Bundling Ghostscript…"
 chmod +x scripts/bundle-gs.sh

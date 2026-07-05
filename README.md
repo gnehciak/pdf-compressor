@@ -19,8 +19,16 @@ Automator shell script, now with a live before/after preview.
 - **JPEG quality** — presets (90…15) plus a free slider (5–95).
 - **Grayscale conversion** option.
 - **Extra optimization pass** (`ocrmypdf --optimize 3 --skip-text`, toggleable).
-- **Batch queue** with per-file progress, results (`4.2 MB → 850 KB (−80%)`), and a completion notification.
-- Output saved next to the original as `*_compressed.pdf` (uniqued, never overwrites). If the result isn't smaller, the original is kept — same as the script.
+- **Target file size mode** — enter "10 MB" and the app binary-searches DPI/quality for the best quality that fits.
+- **Presets** — built-ins (Email, Screen, Compact scan…) plus save-your-own.
+- **Per-file overrides** — give one file in the batch different settings.
+- **Searchable PDFs (OCR)** — invisible text layer via Apple's on-device Vision recognition (English + Chinese and more), no dependencies.
+- **Metadata stripping** — drop title/author/etc. before sharing.
+- **Password-protected PDFs** — enter the password in-app; output is decrypted.
+- **Batch queue** with per-file progress, results (`4.2 MB → 850 KB (−80%)`), a session savings total, and a completion notification.
+- **Share/drag out** compressed results straight from the sidebar.
+- Output saved next to the original as `*_compressed.pdf` (uniqued, never overwrites), or optionally **replace the original** (moved to Trash). If the result isn't smaller, the original is kept — same as the script.
+- **English + Simplified Chinese** UI.
 
 ## Requirements
 
