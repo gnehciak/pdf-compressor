@@ -305,6 +305,11 @@ enum Engine {
         ]
         if settings.grayscale {
             args += ["-sColorConversionStrategy=Gray", "-dProcessColorModel=/DeviceGray"]
+        } else {
+            // Re-encoding images through their source ICC profile can produce
+            // corrupt ICCBased colorspaces (blank pages in Quartz/Poppler),
+            // e.g. iPhone Display P3 scans. Convert to plain RGB instead.
+            args += ["-sColorConversionStrategy=RGB"]
         }
         if let password, !password.isEmpty {
             args += ["-sPDFPassword=\(password)"]
