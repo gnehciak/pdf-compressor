@@ -293,6 +293,15 @@ enum Engine {
             "-dAutoFilterGrayImages=false",
             "-dColorImageFilter=/DCTEncode",
             "-dGrayImageFilter=/DCTEncode",
+            // Without this, source JPEGs that aren't downsampled are copied
+            // through verbatim and the quality setting has no effect at all
+            // (typical for photo scans whose effective DPI is already low).
+            "-dPassThroughJPEGImages=false",
+            // Default threshold is 1.5×, which skips downsampling e.g.
+            // 100 DPI images when targeting 72. Downsample whenever above target.
+            "-dColorImageDownsampleThreshold=1.0",
+            "-dGrayImageDownsampleThreshold=1.0",
+            "-dMonoImageDownsampleThreshold=1.0",
         ]
         if settings.grayscale {
             args += ["-sColorConversionStrategy=Gray", "-dProcessColorModel=/DeviceGray"]

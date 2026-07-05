@@ -110,20 +110,30 @@ struct PDFKitView: NSViewRepresentable {
         guard let url else { view.document = nil; return }
         guard view.document?.documentURL != url else { return }
 
-        // Preserve the user's zoom and scroll position across preview swaps
-        // (the page geometry is identical, only the encoding changed).
-        let keepZoom = context.coordinator.userZoomed
+        // Preserve the user's zoom and scroll position across preview swaps —
+        // but only when the new document has the same page geometry (a
+        // re-render of the same page). A different file/page resets to fit,
+        // otherwise a stale zoom can scroll the view into empty space.
         let oldScale = view.scaleFactor
         let oldPoint = view.currentDestination?.point
+        let oldPageSize = view.document?.page(at: 0)?.bounds(for: .mediaBox).size
 
         view.document = PDFDocument(url: url)
-        if keepZoom, let page = view.document?.page(at: 0) {
+        let newPageSize = view.document?.page(at: 0)?.bounds(for: .mediaBox).size
+        let sameGeometry: Bool = {
+            guard let oldPageSize, let newPageSize else { return false }
+            return abs(oldPageSize.width - newPageSize.width) < 1 &&
+                   abs(oldPageSize.height - newPageSize.height) < 1
+        }()
+
+        if context.coordinator.userZoomed, sameGeometry, let page = view.document?.page(at: 0) {
             view.autoScales = false
             view.scaleFactor = oldScale
             if let oldPoint {
                 view.go(to: PDFDestination(page: page, at: oldPoint))
             }
         } else {
+            context.coordinator.userZoomed = false
             view.autoScales = true
         }
     }
@@ -962,6 +972,11 @@ struct SettingsPanel: View {
                 Label("Original images: \(dpi) DPI", systemImage: "info.circle")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                if settings.wrappedValue.targetDPI >= dpi {
+                    Label("Source is already ≤ target — only JPEG quality shrinks this file. Lower the target DPI for more.", systemImage: "exclamationmark.triangle")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                }
             }
             Picker("DPI", selection: settings.targetDPI) {
                 if !CompressionSettings.dpiPresets.contains(where: { $0.dpi == settings.wrappedValue.targetDPI }) {

@@ -130,3 +130,6 @@
 /* Notifications */
 "Compression finished" = "压缩完成";
 "%lld file(s) compressed, saved %@." = "已压缩 %1$lld 个文件，节省 %2$@。";
+
+/* Low-DPI source hint */
+"Source is already ≤ target — only JPEG quality shrinks this file. Lower the target DPI for more." = "原始分辨率已不高于目标 — 此文件只能靠 JPEG 质量缩小。降低目标 DPI 可进一步压缩。";
