@@ -24,11 +24,11 @@ func drawIcon(size: CGFloat) -> NSImage {
     NSColor.white.setFill()
     doc.fill()
 
-    // Text lines on document
+    // Text lines on document (kept clear of the PDF label below)
     NSColor(calibratedWhite: 0.75, alpha: 1).setFill()
     let lineH = s * 0.025
-    for i in 0..<4 {
-        let y = docY + docH * 0.62 - CGFloat(i) * s * 0.06
+    for i in 0..<3 {
+        let y = docY + docH * 0.72 - CGFloat(i) * s * 0.06
         NSBezierPath(roundedRect: NSRect(x: docX + docW*0.15, y: y, width: docW * 0.7, height: lineH),
                      xRadius: lineH/2, yRadius: lineH/2).fill()
     }
