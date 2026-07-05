@@ -14,7 +14,7 @@ Automator shell script, now with a live before/after preview.
   - **Side by Side** — both versions next to each other.
 - **Finder Quick Action** — right-click a PDF → Quick Actions → **Compress PDF** opens it straight in the app (installed by `install.sh`).
 - **Whole-file size estimate** based on the previewed page's compression ratio.
-- **Detected source DPI** per file (via `pdfimages -list`), shown in the sidebar and settings panel.
+- **Detected source DPI** per file (native CoreGraphics), shown in the sidebar and settings panel.
 - **Target DPI** — the original script's presets (300 "Print quality" … 10 "Practically destroyed") plus a free slider (10–300).
 - **JPEG quality** — presets (90…15) plus a free slider (5–95).
 - **Grayscale conversion** option.
@@ -24,11 +24,17 @@ Automator shell script, now with a live before/after preview.
 
 ## Requirements
 
+**None for the release build** — Ghostscript is bundled inside the app
+(`Contents/Resources/gs/`, AGPL-3.0, license included), and source DPI
+detection is native CoreGraphics. Optional:
+
 ```sh
-brew install ghostscript poppler ocrmypdf   # ocrmypdf is optional
+brew install ocrmypdf   # enables the "Extra optimization pass"
 ```
 
 macOS 14+, Apple Silicon (change `TARGET` in `build.sh` for Intel).
+Building from source requires `brew install ghostscript` (it's copied into
+the bundle at build time by `scripts/bundle-gs.sh`).
 
 ## Build & install
 

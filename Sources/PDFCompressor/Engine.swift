@@ -65,7 +65,21 @@ enum EngineError: LocalizedError {
 enum Tools {
     static let searchDirs = ["/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin"]
 
+    /// Ghostscript shipped inside the app bundle (Contents/Resources/gs/).
+    static var bundledGS: String? {
+        guard let res = Bundle.main.resourceURL else { return nil }
+        let path = res.appendingPathComponent("gs/bin/gs").path
+        return FileManager.default.isExecutableFile(atPath: path) ? path : nil
+    }
+
+    static var bundledGSShare: String? {
+        guard let res = Bundle.main.resourceURL else { return nil }
+        let path = res.appendingPathComponent("gs/share").path
+        return FileManager.default.fileExists(atPath: path) ? path : nil
+    }
+
     static func find(_ name: String) -> String? {
+        if name == "gs", let bundled = bundledGS { return bundled }
         for dir in searchDirs {
             let path = dir + "/" + name
             if FileManager.default.isExecutableFile(atPath: path) { return path }
@@ -73,12 +87,10 @@ enum Tools {
         return nil
     }
 
-    /// Names of required tools that are missing (ocrmypdf is optional).
+    /// Names of required tools that are missing (ocrmypdf is optional;
+    /// Ghostscript only when neither bundled nor installed).
     static func missingRequired() -> [String] {
-        var missing: [String] = []
-        if find("gs") == nil { missing.append("ghostscript") }
-        if find("pdfimages") == nil { missing.append("poppler") }
-        return missing
+        find("gs") == nil ? ["ghostscript"] : []
     }
 
     static var hasOCRmyPDF: Bool { find("ocrmypdf") != nil }
@@ -96,6 +108,13 @@ enum Engine {
         // ocrmypdf needs a sane PATH to find its helpers (gs, jbig2, pngquant…)
         var env = ProcessInfo.processInfo.environment
         env["PATH"] = Tools.searchDirs.joined(separator: ":") + ":" + (env["PATH"] ?? "")
+        // The bundled Ghostscript loads its init files/fonts/ICC profiles
+        // from the app bundle rather than a Homebrew prefix.
+        if toolPath == Tools.bundledGS, let share = Tools.bundledGSShare {
+            env["GS_LIB"] = ["Resource/Init", "lib", "fonts", "iccprofiles", "Resource/Font", "Resource/CMap"]
+                .map { share + "/" + $0 }
+                .joined(separator: ":")
+        }
         process.environment = env
 
         let outPipe = Pipe()
@@ -129,20 +148,41 @@ enum Engine {
 
     // MARK: Metadata
 
-    /// Highest x-ppi among embedded images, via `pdfimages -list`.
+    /// Highest effective DPI among embedded images, read natively via CGPDF.
+    /// Assumes an image spans its page (true for scans), so this is a lower
+    /// bound for images drawn smaller than the page.
     static func detectMaxDPI(of url: URL) async -> Int? {
-        guard let pdfimages = Tools.find("pdfimages"),
-              let result = try? await run(pdfimages, ["-list", url.path]),
-              result.status == 0 else { return nil }
-        var maxDPI = 0
-        for line in result.stdout.split(separator: "\n").dropFirst(2) {
-            let cols = line.split(separator: " ", omittingEmptySubsequences: true)
-            // page num type width height color comp bpc enc interp object ID x-ppi y-ppi size ratio
-            if cols.count >= 14, let ppi = Int(cols[12]) {
-                maxDPI = max(maxDPI, ppi)
+        await Task.detached(priority: .utility) { () -> Int? in
+            guard let doc = CGPDFDocument(url as CFURL), doc.numberOfPages > 0 else { return nil }
+            var maxPPI = 0.0
+            for pageNum in 1...doc.numberOfPages {
+                guard let page = doc.page(at: pageNum) else { continue }
+                let media = page.getBoxRect(.mediaBox)
+                let pageWidthIn = media.width / 72.0
+                let pageHeightIn = media.height / 72.0
+                guard pageWidthIn > 0, pageHeightIn > 0, let dict = page.dictionary else { continue }
+                var resources: CGPDFDictionaryRef?
+                guard CGPDFDictionaryGetDictionary(dict, "Resources", &resources), let res = resources else { continue }
+                var xObjects: CGPDFDictionaryRef?
+                guard CGPDFDictionaryGetDictionary(res, "XObject", &xObjects), let xo = xObjects else { continue }
+                CGPDFDictionaryApplyBlock(xo, { _, value, _ in
+                    var streamRef: CGPDFStreamRef?
+                    guard CGPDFObjectGetValue(value, .stream, &streamRef), let stream = streamRef,
+                          let sd = CGPDFStreamGetDictionary(stream) else { return true }
+                    var subtype: UnsafePointer<CChar>?
+                    guard CGPDFDictionaryGetName(sd, "Subtype", &subtype), let s = subtype,
+                          String(cString: s) == "Image" else { return true }
+                    var width: CGPDFInteger = 0
+                    var height: CGPDFInteger = 0
+                    CGPDFDictionaryGetInteger(sd, "Width", &width)
+                    CGPDFDictionaryGetInteger(sd, "Height", &height)
+                    let ppi = max(Double(width) / pageWidthIn, Double(height) / pageHeightIn)
+                    if ppi.isFinite { maxPPI = max(maxPPI, ppi) }
+                    return true
+                }, nil)
             }
-        }
-        return maxDPI > 0 ? maxDPI : nil
+            return maxPPI >= 10 ? Int(maxPPI.rounded()) : nil
+        }.value
     }
 
     static func fileSize(_ url: URL) -> Int64 {

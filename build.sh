@@ -22,6 +22,10 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN" "$APP/Contents/MacOS/PDFCompressor"
 cp Resources/Info.plist "$APP/Contents/Info.plist"
 
+echo "── Bundling Ghostscript…"
+chmod +x scripts/bundle-gs.sh
+scripts/bundle-gs.sh "$APP"
+
 # Icon (built once, reused afterwards)
 if [ ! -f Resources/AppIcon.icns ]; then
     echo "── Rendering icon…"
